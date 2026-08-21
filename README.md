@@ -1,75 +1,166 @@
-# React + TypeScript + Vite
+# Finance App
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Aplikacja webowa do prywatnego i komercyjnego zarządzania finansami: rejestrowania przychodów i wydatków, tworzenia podsumowań oraz generowania raportów Excel.
 
-Currently, two official plugins are available:
+## Cel projektu
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Użytkownik ma móc w prosty sposób:
 
-## React Compiler
+- dodawać przychody, wydatki i transfery między własnymi kontami;
+- przeglądać saldo, historię oraz wydatki według kategorii;
+- otrzymywać podsumowania dzienne, tygodniowe, miesięczne, kwartalne i roczne;
+- planować budżety i porównywać je z rzeczywistymi wydatkami;
+- importować dane z CSV/Excel i eksportować raporty w formacie `.xlsx`.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+> **Zasada architektoniczna:** PostgreSQL jest źródłem prawdy. Excel służy do importu, eksportu i raportowania — nie jest bazą danych aplikacji.
 
-## Expanding the ESLint configuration
+## Docelowy stack
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+| Obszar | Technologia | Zastosowanie |
+| --- | --- | --- |
+| Frontend | React + TypeScript + Vite | Responsywny panel użytkownika |
+| Style i komponenty | Tailwind CSS + shadcn/ui | Szybkie budowanie spójnego interfejsu |
+| Wykresy | Recharts | Trendy, kategorie i porównania okresów |
+| Backend | Python + FastAPI | REST API, walidacja danych i dokumentacja API |
+| Baza danych | PostgreSQL | Trwałe dane transakcyjne i agregacje raportowe |
+| ORM | SQLAlchemy | Modele i zapytania do bazy |
+| Migracje bazy | Alembic | Wersjonowanie struktury bazy danych |
+| Walidacja API | Pydantic | Bezpieczne dane wejściowe i odpowiedzi API |
+| Logowanie | JWT + refresh token | Sesje i ochrona endpointów |
+| Excel | XlsxWriter + openpyxl | Raporty `.xlsx` oraz import arkuszy |
+| Zadania w tle | Redis + Celery lub RQ | Cykliczne raporty i cięższe eksporty (etap późniejszy) |
+| Środowisko | Docker Compose | Jednolity start lokalnie i wdrożenie |
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+Python jest świadomym wyborem: FastAPI dobrze sprawdzi się jako API, a ekosystem Pythona bardzo dobrze obsługuje analizę danych i pliki Excel.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## Model danych — pierwsza wersja
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### Najważniejsze encje
 
+- **User** — konto użytkownika.
+- **Account** — np. konto bankowe, karta, gotówka, oszczędności.
+- **Category** — np. jedzenie, transport, pensja; może mieć podkategorie.
+- **Transaction** — pojedynczy przychód, wydatek lub transfer.
+- **Budget** — limit kwotowy kategorii na wybrany okres.
+
+### Pola transakcji
+
+```text
+id
+user_id
+account_id
+category_id
+type: income | expense | transfer
+amount: Decimal
+currency: ISO 4217 (np. PLN)
+transaction_date
+description
+tags
+created_at
+updated_at
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Kwoty finansowe zawsze zapisujemy jako `Decimal` / typ `NUMERIC` w PostgreSQL, nigdy jako `float`.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+Transfer między własnymi kontami nie jest ani przychodem, ani wydatkiem — nie może zniekształcać raportów.
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Zakres MVP
 
+Pierwsza działająca wersja powinna zawierać:
+
+1. Rejestrację, logowanie i wylogowanie użytkownika.
+2. Zarządzanie kontami i kategoriami.
+3. Dodawanie, edycję, usuwanie oraz filtrowanie transakcji.
+4. Dashboard z bieżącym saldem, przychodami, wydatkami i ostatnimi wpisami.
+5. Raporty dla okresu: dzień, tydzień, miesiąc, kwartał i rok.
+6. Widok wydatków według kategorii oraz podstawowe wykresy.
+7. Eksport filtrowanych transakcji do CSV i Excel.
+
+## Excel: zakres integracji
+
+### Eksport
+
+Raport Excel powinien zawierać osobne arkusze:
+
+- `Podsumowanie` — saldo, przychody, wydatki, oszczędności;
+- `Transakcje` — dane źródłowe z zastosowanymi filtrami;
+- `Kategorie` — suma i udział każdej kategorii;
+- `Budżety` — plan kontra wykonanie;
+- `Wykresy` — wykresy miesięczne i kategorii.
+
+Do tworzenia nowych raportów używamy `XlsxWriter`. Do importowania istniejących plików `.xlsx` używamy `openpyxl`.
+
+### Import
+
+Import należy realizować przez przygotowany szablon Excel/CSV. Przed zapisem użytkownik powinien zobaczyć podgląd, błędy walidacji i liczbę rekordów do zaimportowania.
+
+Na początku nie implementujemy bezpośredniej, ciągłej synchronizacji z otwartym Excelem. Taka integracja wymagałaby dodatku Microsoft 365 i rozwiązywania konfliktów danych.
+
+## Plan realizacji
+
+### Etap 1 — fundament
+
+- Utworzenie katalogu `backend` z FastAPI.
+- Uruchomienie PostgreSQL i aplikacji przez Docker Compose.
+- Konfiguracja SQLAlchemy, Alembic oraz zmiennych środowiskowych.
+- Konfiguracja komunikacji React ↔ API oraz obsługi błędów.
+
+### Etap 2 — operacje finansowe (MVP)
+
+- Autoryzacja użytkowników.
+- CRUD kont, kategorii i transakcji.
+- Dashboard i listy z filtrowaniem.
+- Agregacje okresowe po stronie API.
+- Testy kluczowej logiki finansowej.
+
+### Etap 3 — raporty i Excel
+
+- Eksport CSV i `.xlsx`.
+- Raport z wieloma arkuszami i wykresami.
+- Import danych z przygotowanego szablonu.
+- Budżety miesięczne i alert przekroczenia limitu.
+
+### Etap 4 — rozwój komercyjny
+
+- Wspólne budżety i role użytkowników.
+- Transakcje cykliczne: czynsz, abonamenty, pensja.
+- Załączniki do transakcji i rachunków.
+- Zadania w tle: raporty e-mail oraz powiadomienia.
+- Integracje bankowe i Microsoft 365 / Google Sheets — po analizie wymagań prawnych i bezpieczeństwa.
+
+## Proponowana struktura katalogów
+
+```text
+finance-app/
+├── frontend/                 # React + TypeScript
+│   └── src/
+│       ├── features/         # dashboard, transactions, budgets, reports
+│       ├── components/
+│       ├── api/
+│       └── pages/
+├── backend/
+│   ├── app/
+│   │   ├── api/              # endpointy FastAPI
+│   │   ├── models/           # modele SQLAlchemy
+│   │   ├── schemas/          # modele Pydantic
+│   │   ├── services/         # logika biznesowa i Excel
+│   │   ├── repositories/     # komunikacja z bazą
+│   │   ├── tasks/            # zadania w tle
+│   │   └── main.py
+│   └── tests/
+├── docker-compose.yml
+└── README.md
 ```
+
+## Zasady jakości i bezpieczeństwa
+
+- Każdy użytkownik ma dostęp wyłącznie do własnych danych.
+- Dane wejściowe walidujemy po stronie frontendu i backendu.
+- Hasła przechowujemy wyłącznie jako bezpieczne hashe.
+- Sekrety trzymamy w `.env`, nigdy w repozytorium.
+- Tworzymy migracje dla każdej zmiany schematu bazy.
+- Testujemy obliczenia finansowe, zwłaszcza transfery, daty i sumowanie kwot.
+
+## Kolejny krok
+
+Zacząć od przygotowania backendu FastAPI, PostgreSQL i Docker Compose, a następnie zbudować pierwszą pionową funkcję: **dodanie transakcji → zapis do bazy → widoczna suma na dashboardzie**.
