@@ -161,6 +161,31 @@ finance-app/
 - Tworzymy migracje dla każdej zmiany schematu bazy.
 - Testujemy obliczenia finansowe, zwłaszcza transfery, daty i sumowanie kwot.
 
-## Kolejny krok
+## Uruchamianie lokalne
 
-Zacząć od przygotowania backendu FastAPI, PostgreSQL i Docker Compose, a następnie zbudować pierwszą pionową funkcję: **dodanie transakcji → zapis do bazy → widoczna suma na dashboardzie**.
+Pierwsza pionowa funkcja jest gotowa: **dodanie transakcji → zapis do PostgreSQL → aktualne saldo na dashboardzie**.
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+- Panel: `http://localhost:5173`
+- Dokumentacja API: `http://localhost:8000/docs`
+- Endpoint zdrowia: `http://localhost:8000/api/v1/health`
+
+Przy pierwszym starcie backend automatycznie uruchamia migrację Alembic. Aby uruchomić test logiki finansowej bez Dockera:
+
+```bash
+cd backend
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+pytest
+```
+
+## Obecny fundament
+
+- `frontend/` zawiera aplikację React/Vite i komunikuje się z API przez `/api/v1`.
+- `backend/` zawiera FastAPI, SQLAlchemy, Pydantic i pierwszą migrację Alembic.
+- `transactions` przechowuje kwoty jako `NUMERIC(14,2)`; transfery są pomijane w podsumowaniu.
+- Logowanie, konta, kategorie, budżety i raporty Excel pozostają kolejnymi elementami MVP.

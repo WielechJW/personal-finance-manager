@@ -1,15 +1,13 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
-
-type TransactionType = 'income' | 'expense'
-
-type Transaction = {
-  id: number
-  type: TransactionType
-  amount: number
-  description: string
-  date: string
-}
+import {
+  createTransaction,
+  getSummary,
+  getTransactions,
+  type FinancialSummary,
+  type Transaction,
+  type TransactionType,
+} from './api/transactions'
 
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat('pl-PL', {
@@ -23,40 +21,57 @@ function App() {
   const [amount, setAmount] = useState('')
   const [description, setDescription] = useState('')
   const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [summary, setSummary] = useState<FinancialSummary>({ income: '0', expenses: '0', balance: '0' })
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const summary = useMemo(() => {
-    const income = transactions
-      .filter((transaction) => transaction.type === 'income')
-      .reduce((total, transaction) => total + transaction.amount, 0)
-    const expenses = transactions
-      .filter((transaction) => transaction.type === 'expense')
-      .reduce((total, transaction) => total + transaction.amount, 0)
+  const periodLabel = useMemo(
+    () => new Intl.DateTimeFormat('pl-PL', { month: 'long', year: 'numeric' }).format(new Date()),
+    [],
+  )
 
-    return { income, expenses, balance: income - expenses }
-  }, [transactions])
+  const loadDashboard = async () => {
+    setIsLoading(true)
+    try {
+      const [loadedTransactions, loadedSummary] = await Promise.all([getTransactions(), getSummary()])
+      setTransactions(loadedTransactions)
+      setSummary(loadedSummary)
+      setError(null)
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : 'Wystąpił nieoczekiwany błąd.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  useEffect(() => {
+    void loadDashboard()
+  }, [])
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const parsedAmount = Number(amount.replace(',', '.'))
 
     if (!description.trim() || !Number.isFinite(parsedAmount) || parsedAmount <= 0) return
 
-    setTransactions((currentTransactions) => [
-      {
-        id: Date.now(),
+    setIsSaving(true)
+    try {
+      await createTransaction({
         type,
-        amount: parsedAmount,
+        amount: parsedAmount.toFixed(2),
         description: description.trim(),
-        date: new Intl.DateTimeFormat('pl-PL', {
-          day: '2-digit',
-          month: 'long',
-          year: 'numeric',
-        }).format(new Date()),
-      },
-      ...currentTransactions,
-    ])
-    setAmount('')
-    setDescription('')
+        transaction_date: new Date().toISOString().slice(0, 10),
+        currency: 'PLN',
+      })
+      setAmount('')
+      setDescription('')
+      await loadDashboard()
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : 'Nie udało się zapisać transakcji.')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
@@ -66,13 +81,13 @@ function App() {
           <span className="grid size-8 place-items-center rounded-lg bg-slate-900 text-sm text-white">F</span>
           <span>Finanse</span>
         </a>
-        <span className="text-sm font-medium text-slate-500">Sierpień 2026</span>
+        <span className="text-sm font-medium capitalize text-slate-500">{periodLabel}</span>
       </header>
 
       <section className="mb-8 max-w-xl" aria-labelledby="page-title">
         <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Twój budżet</p>
         <h1 id="page-title" className="text-3xl font-bold tracking-tight sm:text-4xl">Dodaj nową transakcję</h1>
-        <p className="mt-3 text-slate-600">Na początek wpisz przychód lub wydatek. Dane zostają w aplikacji podczas tej sesji.</p>
+        <p className="mt-3 text-slate-600">Dodawaj przychody i wydatki. Wpisy są bezpiecznie zapisywane w bazie danych.</p>
       </section>
 
       <section className="grid gap-5 md:grid-cols-[1.2fr_0.8fr]">
@@ -133,23 +148,24 @@ function App() {
             />
           </label>
 
-          <button className="w-full rounded-lg bg-slate-900 py-3 font-semibold text-white transition hover:bg-slate-700" type="submit">
-            Dodaj {type === 'expense' ? 'wydatek' : 'przychód'}
+          <button className="w-full rounded-lg bg-slate-900 py-3 font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60" disabled={isSaving} type="submit">
+            {isSaving ? 'Zapisywanie…' : `Dodaj ${type === 'expense' ? 'wydatek' : 'przychód'}`}
           </button>
+          {error && <p className="mt-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700" role="alert">{error}</p>}
         </form>
 
         <aside className="rounded-xl bg-slate-900 p-6 text-white shadow-sm" aria-label="Podsumowanie bieżącego miesiąca">
           <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Podsumowanie</p>
           <p className="mt-7 text-sm text-slate-300">Aktualne saldo</p>
-          <p className="mb-8 text-3xl font-bold tracking-tight">{formatCurrency(summary.balance)}</p>
+          <p className="mb-8 text-3xl font-bold tracking-tight">{formatCurrency(Number(summary.balance))}</p>
           <dl className="grid gap-4">
             <div className="flex justify-between gap-4 border-t border-white/15 pt-4">
               <dt>Przychody</dt>
-              <dd className="font-semibold text-emerald-400">+ {formatCurrency(summary.income)}</dd>
+              <dd className="font-semibold text-emerald-400">+ {formatCurrency(Number(summary.income))}</dd>
             </div>
             <div className="flex justify-between gap-4 border-t border-white/15 pt-4">
               <dt>Wydatki</dt>
-              <dd className="font-semibold text-rose-400">− {formatCurrency(summary.expenses)}</dd>
+              <dd className="font-semibold text-rose-400">− {formatCurrency(Number(summary.expenses))}</dd>
             </div>
           </dl>
         </aside>
@@ -164,7 +180,9 @@ function App() {
           <span className="text-sm font-medium text-slate-500">{transactions.length} wpisów</span>
         </div>
 
-        {transactions.length === 0 ? (
+        {isLoading ? (
+          <div className="grid min-h-36 place-items-center p-5 text-sm text-slate-500">Wczytywanie transakcji…</div>
+        ) : transactions.length === 0 ? (
           <div className="grid min-h-36 place-items-center p-5 text-center">
             <span className="grid size-9 place-items-center rounded-full bg-slate-100 text-xl text-slate-600" aria-hidden="true">+</span>
             <p className="text-sm text-slate-500">Dodaj pierwszy przychód lub wydatek, aby zobaczyć historię.</p>
@@ -178,10 +196,10 @@ function App() {
                 </span>
                 <div className="grid gap-0.5">
                   <strong className="text-sm text-slate-800">{transaction.description}</strong>
-                  <small className="text-xs text-slate-500">{transaction.date}</small>
+                  <small className="text-xs text-slate-500">{new Intl.DateTimeFormat('pl-PL', { dateStyle: 'long' }).format(new Date(`${transaction.transaction_date}T00:00:00`))}</small>
                 </div>
                 <span className={`ml-auto text-sm font-semibold whitespace-nowrap ${transaction.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                  {transaction.type === 'income' ? '+' : '−'} {formatCurrency(transaction.amount)}
+                  {transaction.type === 'income' ? '+' : '−'} {formatCurrency(Number(transaction.amount))}
                 </span>
               </li>
             ))}
