@@ -2,12 +2,27 @@ export type TransactionType = 'income' | 'expense' | 'transfer'
 
 export type Transaction = {
   id: number
+  account_id: number | null
+  category_id: number | null
   type: TransactionType
   amount: string
   currency: string
   description: string
   transaction_date: string
   created_at: string
+}
+
+export type Account = {
+  id: number
+  name: string
+  kind: 'bank' | 'cash' | 'savings' | 'card'
+  currency: string
+}
+
+export type Category = {
+  id: number
+  name: string
+  type: 'income' | 'expense'
 }
 
 export type FinancialSummary = {
@@ -17,6 +32,8 @@ export type FinancialSummary = {
 }
 
 type NewTransaction = {
+  account_id: number
+  category_id: number
   type: TransactionType
   amount: string
   description: string
@@ -42,5 +59,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const getTransactions = () => request<Transaction[]>('/transactions')
 export const getSummary = () => request<FinancialSummary>('/dashboard/summary')
+export const getAccounts = () => request<Account[]>('/accounts')
+export const getCategories = () => request<Category[]>('/categories')
 export const createTransaction = (transaction: NewTransaction) =>
   request<Transaction>('/transactions', { method: 'POST', body: JSON.stringify(transaction) })

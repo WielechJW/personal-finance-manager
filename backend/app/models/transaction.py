@@ -2,7 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
 
-from sqlalchemy import Date, DateTime, Enum as SqlEnum, Numeric, String, func
+from sqlalchemy import Date, DateTime, Enum as SqlEnum, ForeignKey, Numeric, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -18,6 +18,8 @@ class Transaction(Base):
     __tablename__ = "transactions"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int | None] = mapped_column(ForeignKey("accounts.id", ondelete="RESTRICT"))
+    category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id", ondelete="RESTRICT"))
     type: Mapped[TransactionType] = mapped_column(
         SqlEnum(TransactionType, values_callable=lambda enum: [item.value for item in enum]), index=True
     )

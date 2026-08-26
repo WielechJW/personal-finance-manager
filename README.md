@@ -170,6 +170,8 @@ cp .env.example .env
 docker compose up --build
 ```
 
+Przed pierwszym uruchomieniem zmień `POSTGRES_PASSWORD` w `.env` na własne hasło. Po zmianie hasła w już utworzonym środowisku developerskim trzeba odtworzyć pustą bazę poleceniem `docker compose down -v` (usuwa ono lokalne dane).
+
 - Panel: `http://localhost:5173`
 - Dokumentacja API: `http://localhost:8000/docs`
 - Endpoint zdrowia: `http://localhost:8000/api/v1/health`
@@ -188,4 +190,5 @@ pytest
 - `frontend/` zawiera aplikację React/Vite i komunikuje się z API przez `/api/v1`.
 - `backend/` zawiera FastAPI, SQLAlchemy, Pydantic i pierwszą migrację Alembic.
 - `transactions` przechowuje kwoty jako `NUMERIC(14,2)`; transfery są pomijane w podsumowaniu.
+- Konta i kategorie są osobnymi encjami API. Pierwszy start dodaje konta „Konto główne” i „Gotówka” oraz kategorie „Jedzenie”, „Transport” i „Pensja”.
 - Logowanie, konta, kategorie, budżety i raporty Excel pozostają kolejnymi elementami MVP.

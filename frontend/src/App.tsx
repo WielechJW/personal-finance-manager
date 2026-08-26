@@ -2,8 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
   createTransaction,
+  getAccounts,
+  getCategories,
   getSummary,
   getTransactions,
+  type Account,
+  type Category,
   type FinancialSummary,
   type Transaction,
   type TransactionType,
@@ -21,6 +25,10 @@ function App() {
   const [amount, setAmount] = useState('')
   const [description, setDescription] = useState('')
   const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [accounts, setAccounts] = useState<Account[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+  const [accountId, setAccountId] = useState('')
+  const [categoryId, setCategoryId] = useState('')
   const [summary, setSummary] = useState<FinancialSummary>({ income: '0', expenses: '0', balance: '0' })
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -34,9 +42,18 @@ function App() {
   const loadDashboard = async () => {
     setIsLoading(true)
     try {
-      const [loadedTransactions, loadedSummary] = await Promise.all([getTransactions(), getSummary()])
+      const [loadedTransactions, loadedSummary, loadedAccounts, loadedCategories] = await Promise.all([
+        getTransactions(),
+        getSummary(),
+        getAccounts(),
+        getCategories(),
+      ])
       setTransactions(loadedTransactions)
       setSummary(loadedSummary)
+      setAccounts(loadedAccounts)
+      setCategories(loadedCategories)
+      setAccountId((current) => current || String(loadedAccounts[0]?.id ?? ''))
+      setCategoryId((current) => current || String(loadedCategories.find((category) => category.type === type)?.id ?? ''))
       setError(null)
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : 'Wystąpił nieoczekiwany błąd.')
@@ -49,15 +66,24 @@ function App() {
     void loadDashboard()
   }, [])
 
+  const visibleCategories = categories.filter((category) => category.type === type)
+
+  const handleTypeChange = (nextType: TransactionType) => {
+    setType(nextType)
+    setCategoryId(String(categories.find((category) => category.type === nextType)?.id ?? ''))
+  }
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const parsedAmount = Number(amount.replace(',', '.'))
 
-    if (!description.trim() || !Number.isFinite(parsedAmount) || parsedAmount <= 0) return
+    if (!description.trim() || !accountId || !categoryId || !Number.isFinite(parsedAmount) || parsedAmount <= 0) return
 
     setIsSaving(true)
     try {
       await createTransaction({
+        account_id: Number(accountId),
+        category_id: Number(categoryId),
         type,
         amount: parsedAmount.toFixed(2),
         description: description.trim(),
@@ -101,14 +127,14 @@ function App() {
               <button
                 className={`rounded-md px-3 py-1.5 text-sm font-medium ${type === 'expense' ? 'bg-white text-rose-700 shadow-sm' : 'text-slate-500'}`}
                 type="button"
-                onClick={() => setType('expense')}
+                onClick={() => handleTypeChange('expense')}
               >
                 Wydatek
               </button>
               <button
                 className={`rounded-md px-3 py-1.5 text-sm font-medium ${type === 'income' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500'}`}
                 type="button"
-                onClick={() => setType('income')}
+                onClick={() => handleTypeChange('income')}
               >
                 Przychód
               </button>
@@ -147,6 +173,36 @@ function App() {
               value={description}
             />
           </label>
+
+          <div className="mb-6 grid gap-5 sm:grid-cols-2">
+            <label className="grid gap-2 text-sm font-medium text-slate-700" htmlFor="account">
+              Konto
+              <select
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-3 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                id="account"
+                onChange={(event) => setAccountId(event.target.value)}
+                required
+                value={accountId}
+              >
+                <option value="">Wybierz konto</option>
+                {accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
+              </select>
+            </label>
+
+            <label className="grid gap-2 text-sm font-medium text-slate-700" htmlFor="category">
+              Kategoria
+              <select
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-3 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                id="category"
+                onChange={(event) => setCategoryId(event.target.value)}
+                required
+                value={categoryId}
+              >
+                <option value="">Wybierz kategorię</option>
+                {visibleCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+              </select>
+            </label>
+          </div>
 
           <button className="w-full rounded-lg bg-slate-900 py-3 font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60" disabled={isSaving} type="submit">
             {isSaving ? 'Zapisywanie…' : `Dodaj ${type === 'expense' ? 'wydatek' : 'przychód'}`}
@@ -196,7 +252,7 @@ function App() {
                 </span>
                 <div className="grid gap-0.5">
                   <strong className="text-sm text-slate-800">{transaction.description}</strong>
-                  <small className="text-xs text-slate-500">{new Intl.DateTimeFormat('pl-PL', { dateStyle: 'long' }).format(new Date(`${transaction.transaction_date}T00:00:00`))}</small>
+              <small className="text-xs text-slate-500">{new Intl.DateTimeFormat('pl-PL', { dateStyle: 'long' }).format(new Date(`${transaction.transaction_date}T00:00:00`))}{transaction.category_id ? ` · ${categories.find((category) => category.id === transaction.category_id)?.name ?? 'Kategoria'}` : ''}</small>
                 </div>
                 <span className={`ml-auto text-sm font-semibold whitespace-nowrap ${transaction.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
                   {transaction.type === 'income' ? '+' : '−'} {formatCurrency(Number(transaction.amount))}
