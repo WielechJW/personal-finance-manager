@@ -1,3 +1,5 @@
+import { getAuthToken } from './auth'
+
 export type TransactionType = 'income' | 'expense' | 'transfer'
 
 export type Transaction = {
@@ -44,9 +46,14 @@ type NewTransaction = {
 const apiUrl = import.meta.env.VITE_API_URL ?? '/api/v1'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getAuthToken()
   const response = await fetch(`${apiUrl}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
     ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...init?.headers,
+    },
   })
 
   if (!response.ok) {

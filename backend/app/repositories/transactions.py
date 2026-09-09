@@ -7,16 +7,16 @@ from app.models.transaction import Transaction
 from app.schemas.transaction import TransactionCreate
 
 
-def create_transaction(db: Session, payload: TransactionCreate) -> Transaction:
-    transaction = Transaction(**payload.model_dump())
+def create_transaction(db: Session, payload: TransactionCreate, user_id: int) -> Transaction:
+    transaction = Transaction(**payload.model_dump(), user_id=user_id)
     db.add(transaction)
     db.commit()
     db.refresh(transaction)
     return transaction
 
 
-def list_transactions(db: Session, date_from: date | None, date_to: date | None) -> list[Transaction]:
-    statement: Select[tuple[Transaction]] = select(Transaction)
+def list_transactions(db: Session, user_id: int, date_from: date | None, date_to: date | None) -> list[Transaction]:
+    statement: Select[tuple[Transaction]] = select(Transaction).where(Transaction.user_id == user_id)
     if date_from:
         statement = statement.where(Transaction.transaction_date >= date_from)
     if date_to:

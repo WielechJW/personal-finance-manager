@@ -176,6 +176,10 @@ Przed pierwszym uruchomieniem zmień `POSTGRES_PASSWORD` w `.env` na własne has
 - Dokumentacja API: `http://localhost:8000/docs`
 - Endpoint zdrowia: `http://localhost:8000/api/v1/health`
 
+Rejestracja i logowanie są dostępne bezpośrednio w panelu. Hasła są hashowane
+algorytmem Argon2, a chronione endpointy API wymagają tokenu JWT. Każdy użytkownik
+otrzymuje własne domyślne konta i kategorie oraz widzi wyłącznie swoje transakcje.
+
 Przy pierwszym starcie backend automatycznie uruchamia migrację Alembic. Aby uruchomić test logiki finansowej bez Dockera:
 
 ```bash
@@ -191,4 +195,5 @@ pytest
 - `backend/` zawiera FastAPI, SQLAlchemy, Pydantic i pierwszą migrację Alembic.
 - `transactions` przechowuje kwoty jako `NUMERIC(14,2)`; transfery są pomijane w podsumowaniu.
 - Konta i kategorie są osobnymi encjami API. Pierwszy start dodaje konta „Konto główne” i „Gotówka” oraz kategorie „Jedzenie”, „Transport” i „Pensja”.
-- Logowanie, konta, kategorie, budżety i raporty Excel pozostają kolejnymi elementami MVP.
+- Rejestracja i logowanie użytkowników działają z izolacją danych między kontami.
+- Budżety i raporty Excel pozostają kolejnymi elementami MVP.

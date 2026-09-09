@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
+import { clearAuthToken, getAuthToken, getCurrentUser, saveAuthToken, type AuthResponse, type User } from './api/auth'
 import {
   createTransaction,
   getAccounts,
@@ -12,6 +13,7 @@ import {
   type Transaction,
   type TransactionType,
 } from './api/transactions'
+import { AuthPanel } from './components/AuthPanel'
 
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat('pl-PL', {
@@ -21,6 +23,8 @@ const formatCurrency = (amount: number) =>
   }).format(amount)
 
 function App() {
+  const [user, setUser] = useState<User | null>(null)
+  const [isAuthLoading, setIsAuthLoading] = useState(true)
   const [type, setType] = useState<TransactionType>('expense')
   const [amount, setAmount] = useState('')
   const [description, setDescription] = useState('')
@@ -39,7 +43,7 @@ function App() {
     [],
   )
 
-  const loadDashboard = async () => {
+  const loadDashboard = useCallback(async () => {
     setIsLoading(true)
     try {
       const [loadedTransactions, loadedSummary, loadedAccounts, loadedCategories] = await Promise.all([
@@ -53,18 +57,44 @@ function App() {
       setAccounts(loadedAccounts)
       setCategories(loadedCategories)
       setAccountId((current) => current || String(loadedAccounts[0]?.id ?? ''))
-      setCategoryId((current) => current || String(loadedCategories.find((category) => category.type === type)?.id ?? ''))
+      setCategoryId((current) => current || String(loadedCategories.find((category) => category.type === 'expense')?.id ?? ''))
       setError(null)
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : 'Wystąpił nieoczekiwany błąd.')
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
+    const restoreSession = async () => {
+      if (!getAuthToken()) {
+        setIsAuthLoading(false)
+        return
+      }
+      try {
+        setUser(await getCurrentUser())
+        void loadDashboard()
+      } catch {
+        clearAuthToken()
+      } finally {
+        setIsAuthLoading(false)
+      }
+    }
+    void restoreSession()
+  }, [loadDashboard])
+
+  const handleAuthenticated = (response: AuthResponse) => {
+    saveAuthToken(response.access_token)
+    setUser(response.user)
     void loadDashboard()
-  }, [])
+  }
+
+  const handleLogout = () => {
+    clearAuthToken()
+    setUser(null)
+    setTransactions([])
+  }
 
   const visibleCategories = categories.filter((category) => category.type === type)
 
@@ -100,6 +130,12 @@ function App() {
     }
   }
 
+  if (isAuthLoading) {
+    return <main className="grid min-h-screen place-items-center bg-slate-950 text-sm font-medium text-slate-300">Sprawdzanie sesji…</main>
+  }
+
+  if (!user) return <AuthPanel onAuthenticated={handleAuthenticated} />
+
   return (
     <main className="mx-auto min-h-screen max-w-5xl bg-slate-50 px-4 py-8 text-slate-900 sm:px-6">
       <header className="mb-12 flex items-center justify-between">
@@ -107,13 +143,19 @@ function App() {
           <span className="grid size-8 place-items-center rounded-lg bg-slate-900 text-sm text-white">F</span>
           <span>Finanse</span>
         </a>
-        <span className="text-sm font-medium capitalize text-slate-500">{periodLabel}</span>
+        <div className="flex items-center gap-4">
+          <div className="hidden text-right sm:block">
+            <p className="text-sm font-semibold text-slate-800">{user.full_name}</p>
+            <p className="text-xs text-slate-500">{user.email}</p>
+          </div>
+          <button className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100" type="button" onClick={handleLogout}>Wyloguj</button>
+        </div>
       </header>
 
       <section className="mb-8 max-w-xl" aria-labelledby="page-title">
         <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Twój budżet</p>
         <h1 id="page-title" className="text-3xl font-bold tracking-tight sm:text-4xl">Dodaj nową transakcję</h1>
-        <p className="mt-3 text-slate-600">Dodawaj przychody i wydatki. Wpisy są bezpiecznie zapisywane w bazie danych.</p>
+        <p className="mt-3 text-slate-600">{periodLabel}: dodawaj przychody i wydatki przypisane wyłącznie do Twojego konta.</p>
       </section>
 
       <section className="grid gap-5 md:grid-cols-[1.2fr_0.8fr]">
